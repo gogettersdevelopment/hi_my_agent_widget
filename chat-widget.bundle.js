@@ -1,11 +1,13 @@
 (function () {
-    // Helper to ensure marked is loaded before use
     const loadMarked = () => {
         return new Promise((resolve) => {
             if (window.marked) return resolve();
             const script = document.createElement('script');
             script.src = 'https://cdn.jsdelivr.net/npm/marked/marked.min.js';
-            script.onload = () => resolve();
+            script.onload = () => {
+                marked.setOptions({ gfm: true, breaks: true });
+                resolve();
+            };
             document.head.appendChild(script);
         });
     };
@@ -14,45 +16,40 @@
         constructor() {
             super();
             this.attachShadow({ mode: 'open' });
-            this.markedReady = false;
-            loadMarked().then(() => { this.markedReady = true; });
+            loadMarked();
         }
 
-        connectedCallback() {
+        connectedCallback() { this.render(); }
+
+        render() {
             const color = this.getAttribute('primary-color') || '#2563eb';
-            this.render(color);
-        }
-
-        render(color) {
             this.shadowRoot.innerHTML = `
         <style>
-          .floating-container { position: fixed; bottom: 20px; right: 20px; z-index: 999999; font-family: -apple-system, system-ui, sans-serif; }
-          .chat-btn { width: 60px; height: 60px; border-radius: 50%; background: ${color}; color: white; border: none; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; transition: 0.3s; }
-          .chat-btn:hover { transform: scale(1.05); }
-          .chat-window { position: absolute; bottom: 80px; right: 0; width: 380px; height: 600px; background: white; border-radius: 12px; display: none; flex-direction: column; box-shadow: 0 10px 30px rgba(0,0,0,0.1); border: 1px solid #eee; overflow: hidden; }
+          .floating-container { position: fixed; bottom: 20px; right: 20px; z-index: 2147483647; font-family: -apple-system, system-ui, sans-serif; }
+          .chat-btn { width: 60px; height: 60px; border-radius: 50%; background: ${color}; color: white; border: none; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; font-size: 24px; }
+          .chat-window { position: absolute; bottom: 80px; right: 0; width: 380px; height: 600px; background: white; border-radius: 12px; display: none; flex-direction: column; box-shadow: 0 10px 30px rgba(0,0,0,0.1); border: 1px solid #e5e7eb; overflow: hidden; }
           .chat-window.open { display: flex; }
-          .header { background: ${color}; color: white; padding: 15px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
-          #messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 12px; background: #f8fafc; }
-          .msg { padding: 10px 14px; border-radius: 12px; max-width: 85%; font-size: 14px; line-height: 1.6; word-wrap: break-word; }
+          .header { background: ${color}; color: white; padding: 16px; font-weight: bold; }
+          #messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 12px; background: #f9fafb; text-align: left; }
           
-          /* Production Markdown Fixes */
-          .msg p { margin: 0 0 8px 0; }
-          .msg p:last-child { margin-bottom: 0; }
-          .msg ul, .msg ol { padding-left: 20px; margin: 8px 0; }
-          .msg li { margin-bottom: 4px; }
-          .msg strong { font-weight: 700; color: inherit; }
-          
-          .user { align-self: flex-end; background: ${color}; color: white; border-bottom-right-radius: 2px; }
+          .msg { padding: 12px 16px; border-radius: 12px; max-width: 90%; font-size: 14px; line-height: 1.6; word-wrap: break-word; }
           .agent { align-self: flex-start; background: white; color: #1f2937; border: 1px solid #e5e7eb; border-bottom-left-radius: 2px; }
-          .input-area { padding: 15px; border-top: 1px solid #eee; display: flex; background: white; }
-          input { flex: 1; border: 1px solid #ddd; padding: 12px; border-radius: 8px; outline: none; font-size: 14px; }
-          input:focus { border-color: ${color}; box-shadow: 0 0 0 2px ${color}22; }
+          
+          /* Markdown Styling */
+          .agent p { margin: 0 0 10px 0; }
+          .agent ul { margin: 10px 0 10px 18px !important; padding: 0 !important; list-style-type: disc !important; }
+          .agent li { margin-bottom: 8px !important; display: list-item !important; }
+          .agent strong { font-weight: 700; color: #111; }
+
+          .user { align-self: flex-end; background: ${color}; color: white; border-bottom-right-radius: 2px; }
+          .input-area { padding: 15px; border-top: 1px solid #e5e7eb; display: flex; }
+          input { flex: 1; border: 1px solid #d1d5db; padding: 10px; border-radius: 8px; outline: none; }
         </style>
         <div class="floating-container">
           <div class="chat-window" id="win">
-            <div class="header">AI Assistant <span style="cursor:pointer; font-size: 20px;" id="close">✕</span></div>
+            <div class="header">Coffee Assistant</div>
             <div id="messages"></div>
-            <div class="input-area"><input type="text" id="in" placeholder="Ask about our coffee..."></div>
+            <div class="input-area"><input type="text" id="in" placeholder="Type a message..."></div>
           </div>
           <button class="chat-btn" id="btn">💬</button>
         </div>
@@ -63,13 +60,9 @@
         init() {
             const btn = this.shadowRoot.getElementById('btn');
             const win = this.shadowRoot.getElementById('win');
-            const close = this.shadowRoot.getElementById('close');
             const input = this.shadowRoot.getElementById('in');
             const msgBox = this.shadowRoot.getElementById('messages');
-
             btn.onclick = () => win.classList.toggle('open');
-            close.onclick = () => win.classList.remove('open');
-
             input.onkeypress = async (e) => {
                 if (e.key === 'Enter' && input.value.trim()) {
                     const val = input.value;
@@ -80,21 +73,32 @@
             };
         }
 
+        normalizeMarkdown(text) {
+            if (!text) return '';
+
+            return text
+                // 1. Convert any escaped literal \n to real newlines
+                .replace(/\\n/g, '\n')
+
+                // 2. Fix "Clumped Bullets": Find an asterisk that isn't at the start of a line
+                // and force a newline before it.
+                .replace(/([^\n])\s*\*\s*\*\*/g, '$1\n* **')
+
+                // 4. Clean up spaces between the bullet and the bold text
+                .replace(/\*\s+\*\*/g, '* **')
+
+                // 5. Final pass to ensure paragraphs have space
+                .replace(/\n{3,}/g, '\n\n')
+                .trim();
+        }
+
         append(box, txt, role) {
             const el = document.createElement('div');
             el.className = `msg ${role}`;
-            this.updateContent(el, txt, role);
+            el.innerHTML = txt;
             box.appendChild(el);
             box.scrollTop = box.scrollHeight;
             return el;
-        }
-
-        updateContent(el, txt, role) {
-            if (role === 'agent' && window.marked) {
-                el.innerHTML = window.marked.parse(txt);
-            } else {
-                el.textContent = txt;
-            }
         }
 
         async stream(msg, box) {
@@ -107,11 +111,7 @@
                 const response = await fetch(`${apiUrl}/v1/agent-chats/stream/${agentId}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: msg,
-                        userId: this.getUserId(),
-                        userName: "Web User"
-                    })
+                    body: JSON.stringify({ message: msg, userId: "web-user", userName: "Customer" })
                 });
 
                 const reader = response.body.getReader();
@@ -120,40 +120,27 @@
                 while (true) {
                     const { value, done } = await reader.read();
                     if (done) break;
-
                     const chunk = decoder.decode(value, { stream: true });
                     const lines = chunk.split('\n');
 
                     for (const line of lines) {
                         if (line.startsWith('data:')) {
-                            const rawData = line.replace('data:', '').trim();
-                            if (rawData === '[DONE]') return;
-
+                            const dataStr = line.replace('data:', '').trim();
+                            if (dataStr === '[DONE]') break;
                             try {
-                                const parsed = JSON.parse(rawData);
-                                fullText += (parsed.data || parsed.message || "");
-                            } catch (e) {
-                                // Fallback for raw text chunks
-                                fullText += rawData;
-                            }
-
-                            this.updateContent(agentEl, fullText, 'agent');
-                            box.scrollTop = box.scrollHeight;
+                                const parsed = JSON.parse(dataStr);
+                                fullText += (parsed.message || parsed.data || "");
+                            } catch (e) { fullText += dataStr; }
                         }
                     }
-                }
-            } catch (e) {
-                agentEl.textContent = "Error: Unable to connect to assistant.";
-            }
-        }
 
-        getUserId() {
-            let id = localStorage.getItem('agent_user_id');
-            if (!id) {
-                id = 'user_' + Math.floor(Math.random() * 1000000);
-                localStorage.setItem('agent_user_id', id);
-            }
-            return id;
+                    // Update in real-time
+                    if (window.marked) {
+                        agentEl.innerHTML = marked.parse(this.normalizeMarkdown(fullText));
+                    }
+                    box.scrollTop = box.scrollHeight;
+                }
+            } catch (e) { console.error(e); }
         }
     }
     customElements.define('agent-chat-widget', AgentChatWidget);
