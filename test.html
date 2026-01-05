@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Agent Integration Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        p {
+            color: #666;
+        }
+
+        .badge {
+            background: #e1f5fe;
+            color: #01579b;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <h1>AI Chatbot Integration</h1>
+        <p>The chat widget is active in the bottom right corner.</p>
+        <div class="badge">Status: Connected</div>
+        <br><br>
+        <button onclick="localStorage.clear(); location.reload();"
+            style="cursor:pointer; padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; background: #fff;">
+            Reset Chat Session
+        </button>
+    </div>
+
+    <agent-chat-widget 
+        api-url="http://localhost:3333"
+        public-token="f7a95664-2d59-436e-bc9a-8f5e9549b757"
+        
+        title="Bean & Brew Coffee Shop" 
+        primary-color="#3d1f15" 
+        icon="☕"
+        welcome-message="Welcome! How can I brew your day better?">
+    </agent-chat-widget>
+
+    <script src="./chat-widget.bundle.js"
+        defer></script>
+
+</body>
+
+</html>
