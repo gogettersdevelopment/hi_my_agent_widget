@@ -1,4 +1,5 @@
 (function () {
+    // 1. Dependency Loaders
     const loadMarked = () => {
         return new Promise((resolve) => {
             if (window.marked) return resolve();
@@ -12,14 +13,30 @@
         });
     };
 
+    const loadSocketIo = () => {
+        return new Promise((resolve) => {
+            if (window.io) return resolve();
+            const script = document.createElement('script');
+            script.src = 'https://cdn.socket.io/4.7.2/socket.io.min.js';
+            script.onload = resolve;
+            document.head.appendChild(script);
+        });
+    };
+
     class AgentChatWidget extends HTMLElement {
         constructor() {
             super();
             this.attachShadow({ mode: 'open' });
-            loadMarked();
+            this.socket = null;
+            // Initialize dependencies and then the socket
+            Promise.all([loadMarked(), loadSocketIo()]).then(() => {
+                this.initSocket();
+            });
         }
 
-        connectedCallback() { this.render(); }
+        connectedCallback() {
+            this.render();
+        }
 
         getPersistentUserId() {
             let userId = localStorage.getItem('agent_chat_user_id');
@@ -32,6 +49,37 @@
                 localStorage.setItem('agent_chat_user_id', userId);
             }
             return userId;
+        }
+
+        initSocket() {
+            const apiUrl = this.getAttribute('api-url');
+            const uid = this.getPersistentUserId();
+
+            // Connect to the 'chat' namespace configured in NestJS
+            this.socket = io(`${apiUrl}/chat`, {
+                query: { platformUserId: uid },
+                transports: ['websocket']
+            });
+
+            this.socket.on('connect', () => {
+                console.log('%c Live Chat Sync Active ', 'background: #222; color: #bada55');
+            });
+
+            // Listen for the 'staff_reply' event from NestJS
+            this.socket.on('staff_reply', (data) => {
+                const msgBox = this.shadowRoot.getElementById('messages');
+                if (msgBox && data.content) {
+                    // Use marked to parse markdown from staff
+                    const htmlContent = window.marked ? marked.parse(data.content) : data.content;
+                    this.append(msgBox, htmlContent, 'agent');
+
+                    // Optional: Visual indicator if window is closed
+                    const win = this.shadowRoot.getElementById('win');
+                    if (!win.classList.contains('open')) {
+                        this.shadowRoot.getElementById('btn').style.border = '2px solid red';
+                    }
+                }
+            });
         }
 
         render() {
@@ -48,23 +96,18 @@
           :host { --primary: ${color}; }
           .floating-container { position: fixed; bottom: 20px; right: 20px; z-index: 2147483647; font-family: -apple-system, system-ui, sans-serif; }
           .chat-btn { width: 60px; height: 60px; border-radius: 50%; background: var(--primary); color: white; border: none; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.15); display: flex; align-items: center; justify-content: center; font-size: 26px; transition: transform 0.2s; overflow: hidden; }
-          .btn-icon-img { width: 100%; height: 100%; object-fit: cover; }
           .chat-window { position: absolute; bottom: 80px; right: 0; width: 380px; height: 600px; background: white; border-radius: 16px; display: none; flex-direction: column; box-shadow: 0 10px 40px rgba(0,0,0,0.1); border: 1px solid #e5e7eb; overflow: hidden; }
           .chat-window.open { display: flex; }
           .header { background: var(--primary); color: white; padding: 18px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; }
-          
-          #messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 12px; background: #f9fafb; text-align: left; }
-          .msg { padding: 12px 16px; border-radius: 12px; max-width: 85%; font-size: 14px; line-height: 1.5; word-wrap: break-word; width: fit-content; }
-          .agent { align-self: flex-start; background: white; border: 1px solid #e5e7eb; border-bottom-left-radius: 2px; }
-          .user { align-self: flex-end; background: var(--primary); color: white; border-bottom-right-radius: 2px; }
-
-          /* Typing Animation */
+          #messages { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 12px; background: #f9fafb; }
+          .msg { padding: 12px 16px; border-radius: 12px; max-width: 85%; font-size: 14px; line-height: 1.5; word-wrap: break-word; }
+          .agent { align-self: flex-start; background: white; border: 1px solid #e5e7eb; border-bottom-left-radius: 2px; text-align: left; }
+          .user { align-self: flex-end; background: var(--primary); color: white; border-bottom-right-radius: 2px; text-align: left; }
           .typing { display: flex; align-items: center; gap: 4px; height: 20px; }
           .dot { width: 6px; height: 6px; background: #94a3b8; border-radius: 50%; animation: bounce 1.4s infinite ease-in-out both; }
           .dot:nth-child(1) { animation-delay: -0.32s; }
           .dot:nth-child(2) { animation-delay: -0.16s; }
           @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1.0); } }
-
           .input-area { padding: 15px; border-top: 1px solid #e5e7eb; display: flex; gap: 8px; background: white; }
           input { flex: 1; border: 1px solid #d1d5db; padding: 12px; border-radius: 8px; outline: none; }
         </style>
@@ -83,9 +126,18 @@
             const win = this.shadowRoot.getElementById('win');
             const input = this.shadowRoot.getElementById('in');
             const msgBox = this.shadowRoot.getElementById('messages');
-            this.shadowRoot.getElementById('btn').onclick = () => win.classList.toggle('open');
+            const btn = this.shadowRoot.getElementById('btn');
+
+            btn.onclick = () => {
+                win.classList.toggle('open');
+                btn.style.border = 'none'; // Clear notification border
+                setTimeout(() => msgBox.scrollTop = msgBox.scrollHeight, 10);
+            };
+
             this.shadowRoot.getElementById('close').onclick = () => win.classList.remove('open');
+
             if (welcome) this.append(msgBox, welcome, 'agent');
+
             input.onkeypress = async (e) => {
                 if (e.key === 'Enter' && input.value.trim()) {
                     const val = input.value;
@@ -110,7 +162,6 @@
             const token = this.getAttribute('public-token');
             const uid = this.getPersistentUserId();
 
-            // Show Animated Typing Indicator
             const agentEl = this.append(box, '<div class="typing"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>', 'agent');
             let fullText = '';
             let started = false;
@@ -138,7 +189,7 @@
                                 const content = parsed.message || parsed.data || "";
                                 if (content && !started) {
                                     started = true;
-                                    agentEl.innerHTML = ''; // Remove typing dots on first real chunk
+                                    agentEl.innerHTML = '';
                                 }
                                 fullText += content;
                             } catch (e) {
